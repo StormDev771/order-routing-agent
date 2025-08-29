@@ -1,0 +1,81 @@
+from __future__ import annotations
+from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi.middleware.cors import CORSMiddleware  # <-- Added import
+from typing import List
+import io
+import pandas as pd
+
+from .preprocess import preprocess_df
+from .models import Order, ClassifiedOrder, OrdersResponse
+from .agent import OrderRoutingAgent
+from .classifier import hybrid_classify
+
+app = FastAPI(title="Order Routing Agent", version="0.1.0")
+
+# Allow local frontend during development
+origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+agent = OrderRoutingAgent()
+
+@app.get("/health")
+def health():
+    return {"ok": True}
+
+@app.post("/classify/order", response_model=ClassifiedOrder)
+def classify_order(order: Order):
+    # Convert to DataFrame for preprocessing, then back
+    df = pd.DataFrame([order.dict()])
+    df = preprocess_df(df)
+    rec = df.iloc[0].to_dict()
+    category, explanation = agent.process(rec)
+    rec.update({"Category": category, "Explanation": explanation})
+    return rec
+
+@app.post("/classify/json", response_model=OrdersResponse)
+def classify_json(orders: List[Order]):
+    if not orders:
+        return {"results": [], "count": 0}
+    df = pd.DataFrame([o.dict() for o in orders])
+    df = preprocess_df(df)
+    results = []
+    for _, row in df.iterrows():
+        rec = row.to_dict()
+        cat, exp = agent.process(rec)
+        rec.update({"Category": cat, "Explanation": exp})
+        results.append(rec)
+    return {"results": results, "count": len(results)}
+
+@app.post("/classify/file", response_model=OrdersResponse)
+async def classify_file(file: UploadFile = File(...)):
+    try:
+        content = await file.read()
+        # attempt CSV first
+        try:
+            df = pd.read_csv(io.BytesIO(content))
+        except Exception:
+            # fallback JSON lines or array
+            try:
+                df = pd.read_json(io.BytesIO(content))
+            except Exception:
+                raise HTTPException(status_code=400, detail="Unsupported file format; provide CSV or JSON.")
+        df = preprocess_df(df)
+        results = []
+        for _, row in df.iterrows():
+            rec = row.to_dict()
+            cat, exp = agent.process(rec)
+            rec.update({"Category": cat, "Explanation": exp})
+            results.append(rec)
+        return {"results": results, "count": len(results)}
+    finally:
+        await file.close()
