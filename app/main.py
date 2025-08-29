@@ -13,10 +13,7 @@ from .classifier import hybrid_classify
 app = FastAPI(title="Order Routing Agent", version="0.1.0")
 
 # Allow local frontend during development
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
+origins = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
