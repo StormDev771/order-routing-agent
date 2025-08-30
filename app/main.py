@@ -6,8 +6,9 @@ import io
 import pandas as pd
 
 from .preprocess import preprocess_df
-from .models import Order, ClassifiedOrder, OrdersResponse
+from .models import Order, ClassifiedOrder, OrdersResponse, EvaluationResult  # <-- Add this import
 from .agent import OrderRoutingAgent
+from .eval import evaluate_model
 from .classifier import hybrid_classify
 
 app = FastAPI(title="Order Routing Agent", version="0.1.0")
@@ -76,3 +77,33 @@ async def classify_file(file: UploadFile = File(...)):
         return {"results": results, "count": len(results)}
     finally:
         await file.close()
+
+@app.post("/evaluate")
+async def evaluate_orders(file: UploadFile = File(...)):
+    # expects dataset with TrueCategory column
+    df_path = f"/tmp/{file.filename}"
+    with open(df_path, "wb") as f:
+        f.write(await file.read())
+
+    metrics, predictions = evaluate_model(df_path)
+    return {
+        "metrics": metrics,
+        "sample_predictions": predictions.head(5).to_dict(orient="records")
+    }
+
+@app.post("/evaluate/json", response_model=EvaluationResult)
+async def evaluate_orders_json(orders: List[dict]):
+    """
+    Evaluate a list of orders (as dicts) and return metrics and sample predictions.
+    """
+    if not orders:
+        raise HTTPException(status_code=400, detail="No orders provided.")
+    df = pd.DataFrame(orders)
+    # Map 'Category' to 'TrueCategory' for evaluation
+    if "Category" in df.columns:
+        df["TrueCategory"] = df["Category"]
+    metrics, predictions = evaluate_model(df)
+    return {
+        "metrics": metrics,
+        "sample_predictions": predictions.head(5).to_dict(orient="records")
+    }

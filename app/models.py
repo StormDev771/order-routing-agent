@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Optional, List
+from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 class Order(BaseModel):
@@ -17,3 +17,7 @@ class ClassifiedOrder(Order):
 class OrdersResponse(BaseModel):
     results: List[ClassifiedOrder]
     count: int
+
+class EvaluationResult(BaseModel):
+    metrics: Dict[str, Any]
+    sample_predictions: List[Dict[str, Any]]
