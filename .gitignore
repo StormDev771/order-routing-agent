@@ -1,0 +1,43 @@
+.venv/
+venv/
+ENV/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# VSCode settings
+.vscode/
+
+# Data and temp files
+.sample_data
+*.csv
+*.json
+*.xlsx
+*.tmp
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Test and coverage
+htmlcov/
+.coverage
+.cache/
+.tox/
+.pytest_cache/
+
+# Ignore local environment variables
+.env
+.env.*
+
+# Ignore build artifacts
+build/
+dist/
+*.egg

@@ -4,6 +4,8 @@ from fastapi.middleware.cors import CORSMiddleware  # <-- Added import
 from typing import List
 import io
 import pandas as pd
+import math
+from concurrent.futures import ThreadPoolExecutor
 
 from .preprocess import preprocess_df
 from .models import Order, ClassifiedOrder, OrdersResponse, EvaluationResult  # <-- Add this import
@@ -54,6 +56,12 @@ def classify_json(orders: List[Order]):
         results.append(rec)
     return {"results": results, "count": len(results)}
 
+def classify_row(row):
+    rec = row.to_dict()
+    cat, exp = agent.process(rec)
+    rec.update({"Category": cat, "Explanation": exp})
+    return rec
+
 @app.post("/classify/file", response_model=OrdersResponse)
 async def classify_file(file: UploadFile = File(...)):
     try:
@@ -62,18 +70,13 @@ async def classify_file(file: UploadFile = File(...)):
         try:
             df = pd.read_csv(io.BytesIO(content))
         except Exception:
-            # fallback JSON lines or array
             try:
                 df = pd.read_json(io.BytesIO(content))
             except Exception:
                 raise HTTPException(status_code=400, detail="Unsupported file format; provide CSV or JSON.")
         df = preprocess_df(df)
-        results = []
-        for _, row in df.iterrows():
-            rec = row.to_dict()
-            cat, exp = agent.process(rec)
-            rec.update({"Category": cat, "Explanation": exp})
-            results.append(rec)
+        with ThreadPoolExecutor() as executor:
+            results = list(executor.map(classify_row, [row for _, row in df.iterrows()]))
         return {"results": results, "count": len(results)}
     finally:
         await file.close()
